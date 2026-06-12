@@ -1,178 +1,349 @@
-// index.js
-// Tugas Kecil 1 — Student API
-// Web Advanced Development
-//
-// Instruksi:
-//   1. Baca setiap komentar TODO dengan seksama.
-//   2. Ganti baris "// TODO: ..." dengan kode yang benar.
-//   3. Jangan ubah nama variabel, nama endpoint, atau struktur yang sudah ada.
-//   4. Test setiap endpoint di Postman sebelum submit.
-//
-// Run: node index.js  →  http://localhost:3000
-
-// Sebelum itu, tuliskan nama, NIM, di bawah ini, dan apabila sudah selesai, isi refleksi di bawah ini (dalam bentuk comment)
-// Nama: ...
-// NIM: ...
-// Refleksi:
-// blablabla
-// blablabla
-// blablabla
-// blablabla
-// blablabla
-
 const express = require("express");
+const { PrismaClient } = require("@prisma/client");
+
 const app = express();
+const prisma = new PrismaClient();
 const PORT = 3000;
 
-// ── Middleware ───────────────────────────────────────────────
-// TODO: tambahkan middleware agar Express bisa baca JSON dari request body
-// Petunjuk: satu baris, pakai express.json()
+async function seedData() {
+  const walletCount = await prisma.wallet.count();
 
+  if (walletCount === 0) {
+    console.log("Seeding data awal...");
 
-// ── In-memory "database" ─────────────────────────────────────
-// Data awal — jangan diubah, dipakai untuk pengujian
-let students = [
-  { id: 1, name: "Andi Saputra",    nim: "231001", major: "Informatika",          gpa: 3.75 },
-  { id: 2, name: "Bella Kurnia",    nim: "231002", major: "Sistem Informasi",      gpa: 3.50 },
-  { id: 3, name: "Candra Wijaya",   nim: "231003", major: "Informatika",          gpa: 3.20 },
-];
+    const wallet1 = await prisma.wallet.create({
+      data: {
+        name: "BCA Tabungan",
+        currency: "IDR",
+      },
+    });
 
-// nextId dipakai untuk generate id otomatis saat POST
-let nextId = 4;
+    const wallet2 = await prisma.wallet.create({
+      data: {
+        name: "Cash",
+        currency: "IDR",
+      },
+    });
 
-// ════════════════════════════════════════════════════════════
-//  ENDPOINT 1 — GET /students
-//  Kembalikan semua data mahasiswa dalam bentuk array JSON
-// ════════════════════════════════════════════════════════════
-app.get("/students", (req, res) => {
-  // TODO: kirim response berisi seluruh array students dengan status 200
+    await prisma.transaction.createMany({
+      data: [
+        {
+          amount: 5000000,
+          type: "income",
+          category: "salary",
+          date: new Date("2025-01-05"),
+          walletId: wallet1.id,
+        },
+        {
+          amount: 45000,
+          type: "expense",
+          category: "food",
+          date: new Date("2025-01-06"),
+          walletId: wallet1.id,
+        },
+        {
+          amount: 25000,
+          type: "expense",
+          category: "transport",
+          date: new Date("2025-01-07"),
+          walletId: wallet1.id,
+        },
+        {
+          amount: 80000,
+          type: "expense",
+          category: "food",
+          date: new Date("2025-01-10"),
+          walletId: wallet1.id,
+        },
+        {
+          amount: 500000,
+          type: "income",
+          category: "freelance",
+          date: new Date("2025-01-15"),
+          walletId: wallet1.id,
+        },
+        {
+          amount: 200000,
+          type: "income",
+          category: "salary",
+          date: new Date("2025-01-05"),
+          walletId: wallet2.id,
+        },
+        {
+          amount: 30000,
+          type: "expense",
+          category: "food",
+          date: new Date("2025-01-08"),
+          walletId: wallet2.id,
+        },
+      ],
+    });
 
+    console.log("Data awal berhasil dimasukkan");
+  }
+}
 
+app.use(express.json());
+
+app.get("/test", (req, res) => {
+  res.json({
+    message: "API jalan",
+  });
 });
 
-// ════════════════════════════════════════════════════════════
-//  ENDPOINT 2 — GET /students/:id
-//  Kembalikan satu mahasiswa berdasarkan id
-//  Jika tidak ditemukan → status 404 + { error: "Student tidak ditemukan" }
-// ════════════════════════════════════════════════════════════
-app.get("/students/:id", (req, res) => {
-  // TODO: konversi req.params.id ke integer (gunakan parseInt)
+/* ==================================================
+1A. GET /wallets
+================================================== */
+app.get("/wallets", async (req, res) => {
+  try {
+    const wallets = await prisma.wallet.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
 
-  // TODO: cari mahasiswa di array students yang id-nya cocok
-  //       gunakan .find()
-
-  // TODO: jika tidak ditemukan, kirim 404 + pesan error
-
-  // TODO: jika ditemukan, kirim data mahasiswanya
-
-
+    res.status(200).json(wallets);
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+    });
+  }
 });
 
-// ════════════════════════════════════════════════════════════
-//  ENDPOINT 3 — POST /students
-//  Tambahkan mahasiswa baru dari request body
-//  Body yang dikirim: { name, nim, major, gpa }
-//  Validasi: name, nim, major wajib ada — kalau tidak → 400
-//  Sukses → status 201 + data mahasiswa baru
-// ════════════════════════════════════════════════════════════
-app.post("/students", (req, res) => {
-  const { name, nim, major, gpa } = req.body;
+/* ==================================================
+1B. POST /wallets
+================================================== */
+app.post("/wallets", async (req, res) => {
+  try {
+    const { name, currency } = req.body;
 
-  // TODO: validasi — cek apakah name, nim, dan major ada dan tidak kosong
-  //       jika tidak valid → kirim status 400 + { error: "name, nim, dan major wajib diisi" }
+    if (!name || name.trim() === "") {
+      return res.status(400).json({
+        error: "name wajib diisi",
+      });
+    }
 
+    const wallet = await prisma.wallet.create({
+      data: {
+        name,
+        currency,
+      },
+    });
 
-  // TODO: buat object mahasiswa baru dengan struktur:
-  //       { id: nextId, name, nim, major, gpa: gpa ?? 0 }
-  //       lalu tambah nextId sebesar 1 (nextId++)
-
-
-  // TODO: masukkan mahasiswa baru ke array students (gunakan .push())
-
-
-  // TODO: kirim response status 201 + data mahasiswa baru
-
-
+    res.status(201).json(wallet);
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+    });
+  }
 });
 
-// ════════════════════════════════════════════════════════════
-//  ENDPOINT 4 — PUT /students/:id
-//  Update data mahasiswa berdasarkan id
-//  Field yang bisa diupdate: name, nim, major, gpa (semua opsional)
-//  Minimal satu field harus dikirim → kalau tidak ada → 400
-//  Jika id tidak ditemukan → 404
-// ════════════════════════════════════════════════════════════
-app.put("/students/:id", (req, res) => {
-  const id = parseInt(req.params.id);
-  const { name, nim, major, gpa } = req.body;
+/* ==================================================
+1C. DELETE /wallets/:id
+================================================== */
+app.delete("/wallets/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
 
-  // TODO: cek apakah semua field undefined — jika iya, kirim 400
+    const wallet = await prisma.wallet.findUnique({
+      where: { id },
+    });
 
+    if (!wallet) {
+      return res.status(404).json({
+        error: "Wallet tidak ditemukan",
+      });
+    }
 
-  // TODO: cari index mahasiswa di array dengan .findIndex()
-  //       simpan hasilnya ke variabel "index"
+    await prisma.transaction.deleteMany({
+      where: { walletId: id },
+    });
 
+    await prisma.wallet.delete({
+      where: { id },
+    });
 
-  // TODO: jika index === -1 (tidak ditemukan), kirim 404
-
-
-  // TODO: update hanya field yang dikirim (jangan timpa yang tidak dikirim)
-  //       Petunjuk: pakai if (name !== undefined) students[index].name = name
-  //       lakukan hal yang sama untuk nim, major, dan gpa
-
-
-  // TODO: kirim response status 200 + data mahasiswa yang sudah diupdate
-
-
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+    });
+  }
 });
 
-// ════════════════════════════════════════════════════════════
-//  ENDPOINT 5 — DELETE /students/:id
-//  Hapus mahasiswa berdasarkan id
-//  Jika tidak ditemukan → 404
-//  Sukses → status 204 (no content)
-// ════════════════════════════════════════════════════════════
-app.delete("/students/:id", (req, res) => {
-  const id = parseInt(req.params.id);
+/* ==================================================
+1D. GET /wallets/:id/transactions
+================================================== */
+app.get("/wallets/:id/transactions", async (req, res) => {
+  try {
+    const walletId = parseInt(req.params.id);
 
-  // TODO: cari index mahasiswa dengan .findIndex()
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        walletId,
+      },
+      orderBy: {
+        date: "desc",
+      },
+    });
 
-
-  // TODO: jika tidak ditemukan (index === -1), kirim 404
-
-
-  // TODO: hapus mahasiswa dari array menggunakan .splice(index, 1)
-
-
-  // TODO: kirim response status 204 tanpa body (gunakan .send())
-
-
+    res.status(200).json(transactions);
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+    });
+  }
 });
 
-// ════════════════════════════════════════════════════════════
-//  BONUS — GET /students/search?major=...
-//  Filter mahasiswa berdasarkan query param major
-//  Contoh: GET /students/search?major=Informatika
-//  Jika tidak ada yang cocok → kembalikan array kosong []
-//
-//  ⚠️  Endpoint ini HARUS didefinisikan SEBELUM /students/:id
-//      karena Express membaca route dari atas ke bawah —
-//      "search" akan ditangkap sebagai :id kalau urutannya salah!
-//
-//  Petunjuk: gunakan req.query.major dan .filter()
-// ════════════════════════════════════════════════════════════
-// TODO: implementasikan endpoint GET /students/search di sini
-//       (pindahkan ke ATAS endpoint GET /students/:id setelah selesai)
+/* ==================================================
+1E. POST /wallets/:id/transactions
+================================================== */
+app.post("/wallets/:id/transactions", async (req, res) => {
+  try {
+    const walletId = parseInt(req.params.id);
 
+    const { amount, type, category, note, date } = req.body;
 
-// ── Start server ─────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Endpoints:`);
-  console.log(`  GET    /students`);
-  console.log(`  GET    /students/:id`);
-  console.log(`  POST   /students`);
-  console.log(`  PUT    /students/:id`);
-  console.log(`  DELETE /students/:id`);
-  console.log(`  GET    /students/search?major=... (bonus)`);
+    if (amount === undefined || !type || !category || !date) {
+      return res.status(400).json({
+        error: "amount, type, category, dan date wajib diisi",
+      });
+    }
+
+    const wallet = await prisma.wallet.findUnique({
+      where: {
+        id: walletId,
+      },
+    });
+
+    if (!wallet) {
+      return res.status(404).json({
+        error: "Wallet tidak ditemukan",
+      });
+    }
+
+    const transaction = await prisma.transaction.create({
+      data: {
+        amount,
+        type,
+        category,
+        note,
+        date: new Date(date),
+        walletId,
+      },
+    });
+
+    res.status(201).json(transaction);
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+    });
+  }
 });
+
+/* ==================================================
+1F. DELETE /transactions/:id
+================================================== */
+app.delete("/transactions/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+
+    const transaction = await prisma.transaction.findUnique({
+      where: { id },
+    });
+
+    if (!transaction) {
+      return res.status(404).json({
+        error: "Transaction tidak ditemukan",
+      });
+    }
+
+    await prisma.transaction.delete({
+      where: { id },
+    });
+
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+    });
+  }
+});
+
+/* ==================================================
+1G. GET /wallets/:id/balance
+================================================== */
+app.get("/wallets/:id/balance", async (req, res) => {
+  try {
+    const walletId = parseInt(req.params.id);
+
+    const transactions = await prisma.transaction.findMany({
+      where: { walletId },
+    });
+
+    let balance = 0;
+
+    for (const trx of transactions) {
+      if (trx.type === "income") {
+        balance += trx.amount;
+      } else {
+        balance -= trx.amount;
+      }
+    }
+
+    res.status(200).json({
+      walletId,
+      balance,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+    });
+  }
+});
+
+/* ==================================================
+1H. GET /wallets/:id/summary
+================================================== */
+app.get("/wallets/:id/summary", async (req, res) => {
+  try {
+    const walletId = parseInt(req.params.id);
+
+    const transactions = await prisma.transaction.findMany({
+      where: { walletId },
+    });
+
+    let totalIncome = 0;
+    let totalExpense = 0;
+
+    for (const trx of transactions) {
+      if (trx.type === "income") {
+        totalIncome += trx.amount;
+      } else {
+        totalExpense += trx.amount;
+      }
+    }
+
+    res.status(200).json({
+      walletId,
+      totalIncome,
+      totalExpense,
+      balance: totalIncome - totalExpense,
+      transactionCount: transactions.length,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+    });
+  }
+});
+
+seedData()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error(err);
+  });
