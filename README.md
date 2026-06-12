@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Tugas Kecil 1 — Student API
 ## Web Advanced Development
 
@@ -59,3 +60,6 @@ Setelah `index.js` selesai dan berfungsi, kerjakan `index.prisma.js`:
    ```
 4. Kerjakan semua TODO di `index.prisma.js`
 5. Jalankan di port 3001: `node index.prisma.js`
+=======
+# uts_wad
+>>>>>>> 5e3cb16288061d0079a6d6418e19b08e23cb9bd7
